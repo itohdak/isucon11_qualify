@@ -1,0 +1,16 @@
+file: /var/log/nginx/access.log
+sort: count
+reverse: true
+output: count,2xx,4xx,5xx,method,uri,sum,avg,min,p90,p95,p99,max
+matching_groups:
+- '^/api/isu/[\w-]+$'
+- '^/isu/[\w-]+$'
+- '^/isu/[\w-]+/graph$'
+- '^/api/isu/[\w-]+/graph$'
+- '^/api/isu/[\w-]+/icon$'
+- '^/api/condition/[\w-]+$'
+- '^/isu/[\w-]+/condition$'
+- '^/api/isu/[\w-]+/icon$'
+ltsv: {}
+json: {}
+regexp: {}
