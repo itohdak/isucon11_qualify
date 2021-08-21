@@ -22,12 +22,12 @@ type counter struct {
 	conditions []IsuConditionBulk
 }
 
-func (m *counter) Set(jiaIsuUUID string, req []PostIsuConditionRequest, c echo.Context) bool {
+func (m *counter) Set(jiaIsuUUID string, req []PostIsuConditionRequest, c echo.Context) int {
 	m.mu.Lock() // 追加
 	tx, err := db.Beginx()
 	if err != nil {
 		c.Logger().Errorf("db error: %v", err)
-		return false
+		return 2
 	}
 	defer tx.Rollback()
 
@@ -35,16 +35,16 @@ func (m *counter) Set(jiaIsuUUID string, req []PostIsuConditionRequest, c echo.C
 	err = tx.Get(&count, "SELECT COUNT(*) FROM `isu` WHERE `jia_isu_uuid` = ?", jiaIsuUUID)
 	if err != nil {
 		c.Logger().Errorf("db error: %v", err)
-		return false
+		return 2
 	}
 	if count == 0 {
-		return false
+		return 3
 	}
 	for _, cond := range req {
 		timestamp := time.Unix(cond.Timestamp, 0)
 
 		if !isValidConditionFormat(cond.Condition) {
-			return false
+			return 3
 		}
 
 		m.conditions = append(m.conditions, IsuConditionBulk{
@@ -62,14 +62,14 @@ func (m *counter) Set(jiaIsuUUID string, req []PostIsuConditionRequest, c echo.C
 			"	VALUES (:jia_isu_uuid, :timestamp, :is_sitting, :condition, :message)", m.conditions)
 		if err_ != nil {
 			c.Logger().Errorf("db error: %v", err_)
-			return true
+			return 2
 		}
 		m.conditions = []IsuConditionBulk{}
 	}
 	err = tx.Commit()
 
 	m.mu.Unlock()
-	return true
+	return 1
 }
 
 func postIsuCondition(c echo.Context) error {
@@ -119,7 +119,12 @@ func postIsuCondition(c echo.Context) error {
 
 	// conditions := []IsuConditionBulk{}
 
-	go m.Set(jiaIsuUUID, req, c)
+	isSuccess := m.Set(jiaIsuUUID, req, c)
+	if isSuccess == 2 {
+		return c.NoContent(http.StatusInternalServerError)
+	} else if isSuccess == 3 {
+		return c.String(http.StatusNotFound, "not found: isu")
+	}
 
 	// for _, cond := range req {
 	// 	timestamp := time.Unix(cond.Timestamp, 0)
