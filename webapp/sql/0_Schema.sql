@@ -35,3 +35,6 @@ CREATE TABLE `isu_association_config` (
   `name` VARCHAR(255) PRIMARY KEY,
   `url` VARCHAR(255) NOT NULL UNIQUE
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4;
+
+-- 11:30追加
+alter table isu_condition add index idx_isucondition_jia_isu_uuid_timestamp(jia_isu_uuid, timestamp);
