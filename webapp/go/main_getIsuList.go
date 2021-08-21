@@ -60,8 +60,8 @@ func getIsuList(c echo.Context) error {
 	}
 	lastConditionList := []IsuCondition{}
 	if err = tx.Select(&lastConditionList, inQuery, inArgs...); err != nil {
-		c.Logger().Errorf("db error: %v", err)
-		return c.NoContent(http.StatusInternalServerError)
+		// c.Logger().Errorf("db error: %v", err)
+		// return c.NoContent(http.StatusInternalServerError)
 	}
 	lastConditionMap := map[string]IsuCondition{}
 	for _, lastCondition := range lastConditionList {
