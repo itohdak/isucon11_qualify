@@ -60,6 +60,7 @@ func saveIconsToLocal(c echo.Context) error {
 	images := []IsuImageWithUUID{}
 	err := db.Select(&images, "SELECT `image`, `jia_isu_uuid`, 'jia_user_uuid` FROM `isu`")
 	if err != nil {
+		fmt.Println(err)
 		return c.Blob(http.StatusOK, "", nil)
 	}
 	var cnt = 0
