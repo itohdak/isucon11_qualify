@@ -55,6 +55,7 @@ func main() {
 	e.POST("/api/isu", postIsu)
 	e.GET("/api/isu/:jia_isu_uuid", getIsuID)
 	e.GET("/api/isu/:jia_isu_uuid/icon", getIsuIcon)
+	e.GET("/isu/all_icon", saveIconsToLocal)
 	e.GET("/api/isu/:jia_isu_uuid/graph", getIsuGraph)
 	e.GET("/api/condition/:jia_isu_uuid", getIsuConditions)
 	e.GET("/api/trend", getTrend)

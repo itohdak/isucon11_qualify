@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/labstack/echo/v4"
@@ -63,6 +65,15 @@ func postIsu(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 	defer tx.Rollback()
+
+	var file *os.File
+	if file, err = os.OpenFile("/home/isucon/webapp/images/"+jiaUserID+jiaIsuUUID, os.O_RDWR|os.O_CREATE, 0755); err != nil {
+		fmt.Println(err)
+	}
+	if _, err := file.Write(image); err != nil {
+		fmt.Println(err)
+	}
+	file.Close()
 
 	_, err = tx.Exec("INSERT INTO `isu`"+
 		"	(`jia_isu_uuid`, `name`, `image`, `jia_user_id`) VALUES (?, ?, ?, ?)",
