@@ -1,7 +1,7 @@
 package main
 
 import (
-	// "math/rand"
+	"math/rand"
 	"net/http"
 	"sync"
 	"time"
