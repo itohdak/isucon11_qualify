@@ -82,36 +82,35 @@ func getIsuList(c echo.Context) error {
 	err = tx.Select(
 		&isuLastConditionList,
 		`
-		SELECT
-			t1.id as id,
-			t1.jia_isu_uuid as jia_isu_uuid,
-			t1.name as name,
-			t1.character as character,
-			# t4.jia_isu_uuid,
-			t4.timestamp as timestamp,
-			t4.is_sitting as is_sitting,
-			t4.condition as condition,
-			t4.message as message
-		FROM
-			isu t1
-		INNER JOIN
-			(
-		SELECT
-			t2.jia_isu_uuid,
-			t2.timestamp,
-			t2.is_sitting,
-			t2.condition,
-			t2.message
-		FROM isu_condition t2
-		INNER JOIN
-		(
-			SELECT jia_isu_uuid, MAX(timestamp) as timestamp
-			FROM isu_condition
-			GROUP BY jia_isu_uuid
-		) t3
-		ON (t2.timestamp = t3.timestamp AND t2.jia_isu_uuid = t3.jia_isu_uuid)
-			) t4
-		ON t1.jia_isu_uuid = t4.jia_isu_uuid AND t1.jia_user_id = ?;
+SELECT
+t1.id,
+t1.jia_isu_uuid,
+t1.name,
+t1.character,
+t4.timestamp,
+t4.is_sitting,
+t4.condition,
+t4.message
+FROM
+isu t1
+INNER JOIN
+(
+SELECT
+t2.jia_isu_uuid,
+t2.timestamp,
+t2.is_sitting,
+t2.condition,
+t2.message
+FROM isu_condition t2
+INNER JOIN
+(
+SELECT jia_isu_uuid, MAX(timestamp) as timestamp
+FROM isu_condition
+GROUP BY jia_isu_uuid
+) t3
+ON (t2.timestamp = t3.timestamp AND t2.jia_isu_uuid = t3.jia_isu_uuid)
+) t4
+ON t1.jia_isu_uuid = t4.jia_isu_uuid AND t1.jia_user_id = ?;
 		`,
 		jiaUserID)
 	if err != nil {
