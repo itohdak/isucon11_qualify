@@ -1,10 +1,10 @@
 package main
 
 import (
-	"database/sql"
-	"errors"
+	"log"
 	"net/http"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 )
 
@@ -37,37 +37,58 @@ func getIsuList(c echo.Context) error {
 	}
 
 	responseList := []GetIsuListResponse{}
+	jia_isu_uuids := []string{}
+	for _, isu := range isuList {
+		jia_isu_uuids = append(jia_isu_uuids, isu.JIAIsuUUID)
+	}
+	inQuery, inArgs, err := sqlx.In(
+		`
+		SELECT isu_condition.*
+		FROM
+		isu_condition
+		INNER JOIN
+		(
+			SELECT jia_isu_uuid, MAX(timestamp) as timestamp
+			FROM isu_condition
+			GROUP BY jia_isu_uuid
+		) t
+		ON isu_condition.jia_isu_uuid = t.jia_isu_uuid AND isu_condition.timestamp = t.timestamp
+		WHERE isu_condition.jia_isu_uuid IN (?)
+		`, jia_isu_uuids)
+	if err != nil {
+		log.Print(err)
+	}
+	lastConditionList := []IsuCondition{}
+	if err = tx.Select(&lastConditionList, inQuery, inArgs...); err != nil {
+		c.Logger().Errorf("db error: %v", err)
+		return c.NoContent(http.StatusInternalServerError)
+	}
+	lastConditionMap := map[string]IsuCondition{}
+	for _, lastCondition := range lastConditionList {
+		lastConditionMap[lastCondition.JIAIsuUUID] = lastCondition
+	}
 	for _, isu := range isuList {
 		var lastCondition IsuCondition
-		foundLastCondition := true
-		err = tx.Get(&lastCondition, "SELECT * FROM `isu_condition` WHERE `jia_isu_uuid` = ? ORDER BY `timestamp` DESC LIMIT 1",
-			isu.JIAIsuUUID)
+		if val, ok := lastConditionMap[isu.JIAIsuUUID]; ok {
+			lastCondition = val
+		} else {
+			continue
+		}
+		var formattedCondition *GetIsuConditionResponse
+		conditionLevel, err := calculateConditionLevel(lastCondition.Condition)
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				foundLastCondition = false
-			} else {
-				c.Logger().Errorf("db error: %v", err)
-				return c.NoContent(http.StatusInternalServerError)
-			}
+			c.Logger().Error(err)
+			return c.NoContent(http.StatusInternalServerError)
 		}
 
-		var formattedCondition *GetIsuConditionResponse
-		if foundLastCondition {
-			conditionLevel, err := calculateConditionLevel(lastCondition.Condition)
-			if err != nil {
-				c.Logger().Error(err)
-				return c.NoContent(http.StatusInternalServerError)
-			}
-
-			formattedCondition = &GetIsuConditionResponse{
-				JIAIsuUUID:     lastCondition.JIAIsuUUID,
-				IsuName:        isu.Name,
-				Timestamp:      lastCondition.Timestamp.Unix(),
-				IsSitting:      lastCondition.IsSitting,
-				Condition:      lastCondition.Condition,
-				ConditionLevel: conditionLevel,
-				Message:        lastCondition.Message,
-			}
+		formattedCondition = &GetIsuConditionResponse{
+			JIAIsuUUID:     lastCondition.JIAIsuUUID,
+			IsuName:        isu.Name,
+			Timestamp:      lastCondition.Timestamp.Unix(),
+			IsSitting:      lastCondition.IsSitting,
+			Condition:      lastCondition.Condition,
+			ConditionLevel: conditionLevel,
+			Message:        lastCondition.Message,
 		}
 
 		res := GetIsuListResponse{
