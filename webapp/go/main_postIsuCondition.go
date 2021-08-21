@@ -72,10 +72,10 @@ func postIsuCondition(c echo.Context) error {
 		})
 	}
 	_, err_ := tx.NamedExec("INSERT INTO `isu_condition`"+
-		"	(condition)"+
-		"	VALUES (:condition)", conditions)
+		"	(`jia_isu_uuid`, `timestamp`, `is_sitting`, `condition`, `message`)"+
+		"	VALUES (:jia_isu_uuid, :timestamp, :is_sitting, :condition, :message)", conditions)
 	if err_ != nil {
-		c.Logger().Errorf("db error: %v", err)
+		c.Logger().Errorf("db error: %v", err_)
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
