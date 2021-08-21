@@ -1,8 +1,9 @@
 package main
 
 import (
-	"math/rand"
+	// "math/rand"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -16,31 +17,17 @@ type IsuConditionBulk struct {
 	Message    string    `db:"message"`
 }
 
-func postIsuCondition(c echo.Context) error {
-	// TODO: 一定割合リクエストを落としてしのぐようにしたが、本来は全量さばけるようにすべき
-	dropProbability := 0.9
-	if rand.Float64() <= dropProbability {
-		c.Logger().Warnf("drop post isu condition request")
-		return c.NoContent(http.StatusAccepted)
-	}
+type counter struct {
+	mu         sync.Mutex // 追加
+	conditions []IsuConditionBulk
+}
 
-	jiaIsuUUID := c.Param("jia_isu_uuid")
-	if jiaIsuUUID == "" {
-		return c.String(http.StatusBadRequest, "missing: jia_isu_uuid")
-	}
-
-	req := []PostIsuConditionRequest{}
-	err := c.Bind(&req)
-	if err != nil {
-		return c.String(http.StatusBadRequest, "bad request body")
-	} else if len(req) == 0 {
-		return c.String(http.StatusBadRequest, "bad request body")
-	}
-
+func (m *counter) Set(jiaIsuUUID string, req []PostIsuConditionRequest, c echo.Context) bool {
+	m.mu.Lock() // 追加
 	tx, err := db.Beginx()
 	if err != nil {
 		c.Logger().Errorf("db error: %v", err)
-		return c.NoContent(http.StatusInternalServerError)
+		return false
 	}
 	defer tx.Rollback()
 
@@ -48,22 +35,19 @@ func postIsuCondition(c echo.Context) error {
 	err = tx.Get(&count, "SELECT COUNT(*) FROM `isu` WHERE `jia_isu_uuid` = ?", jiaIsuUUID)
 	if err != nil {
 		c.Logger().Errorf("db error: %v", err)
-		return c.NoContent(http.StatusInternalServerError)
+		return false
 	}
 	if count == 0 {
-		return c.String(http.StatusNotFound, "not found: isu")
+		return false
 	}
-
-	conditions := []IsuConditionBulk{}
-
 	for _, cond := range req {
 		timestamp := time.Unix(cond.Timestamp, 0)
 
 		if !isValidConditionFormat(cond.Condition) {
-			return c.String(http.StatusBadRequest, "bad request body")
+			return false
 		}
 
-		conditions = append(conditions, IsuConditionBulk{
+		m.conditions = append(m.conditions, IsuConditionBulk{
 			JIAIsuUUID: jiaIsuUUID,
 			Timestamp:  timestamp,
 			IsSitting:  cond.IsSitting,
@@ -71,13 +55,94 @@ func postIsuCondition(c echo.Context) error {
 			Message:    cond.Message,
 		})
 	}
-	_, err_ := tx.NamedExec("INSERT INTO `isu_condition`"+
-		"	(`jia_isu_uuid`, `timestamp`, `is_sitting`, `condition`, `message`)"+
-		"	VALUES (:jia_isu_uuid, :timestamp, :is_sitting, :condition, :message)", conditions)
-	if err_ != nil {
-		c.Logger().Errorf("db error: %v", err_)
-		return c.NoContent(http.StatusInternalServerError)
+
+	if len(req) >= 100 {
+		_, err_ := tx.NamedExec("INSERT INTO `isu_condition`"+
+			"	(`jia_isu_uuid`, `timestamp`, `is_sitting`, `condition`, `message`)"+
+			"	VALUES (:jia_isu_uuid, :timestamp, :is_sitting, :condition, :message)", m.conditions)
+		if err_ != nil {
+			c.Logger().Errorf("db error: %v", err_)
+			return true
+		}
+		m.conditions = []IsuConditionBulk{}
 	}
+	err = tx.Commit()
+
+	m.mu.Unlock()
+	return true
+}
+
+func postIsuCondition(c echo.Context) error {
+	// TODO: 一定割合リクエストを落としてしのぐようにしたが、本来は全量さばけるようにすべき
+
+	req := []PostIsuConditionRequest{}
+	err := c.Bind(&req)
+
+	// if len(req) < 15 {
+	// 	c.Logger().Warnf("under 5 data")
+	// 	return c.NoContent(http.StatusAccepted)
+	// }
+
+	// dropProbability := 0.5
+	// if rand.Float64() <= dropProbability {
+	// 	c.Logger().Warnf("drop post isu condition request")
+	// 	return c.NoContent(http.StatusAccepted)
+	// }
+
+	jiaIsuUUID := c.Param("jia_isu_uuid")
+	if jiaIsuUUID == "" {
+		return c.String(http.StatusBadRequest, "missing: jia_isu_uuid")
+	}
+
+	if err != nil {
+		return c.String(http.StatusBadRequest, "bad request body")
+	} else if len(req) == 0 {
+		return c.String(http.StatusBadRequest, "bad request body")
+	}
+
+	// tx, err := db.Beginx()
+	// if err != nil {
+	// 	c.Logger().Errorf("db error: %v", err)
+	// 	return c.NoContent(http.StatusInternalServerError)
+	// }
+	// defer tx.Rollback()
+
+	// var count int
+	// err = tx.Get(&count, "SELECT COUNT(*) FROM `isu` WHERE `jia_isu_uuid` = ?", jiaIsuUUID)
+	// if err != nil {
+	// 	c.Logger().Errorf("db error: %v", err)
+	// 	return c.NoContent(http.StatusInternalServerError)
+	// }
+	// if count == 0 {
+	// 	return c.String(http.StatusNotFound, "not found: isu")
+	// }
+
+	// conditions := []IsuConditionBulk{}
+
+	go m.Set(jiaIsuUUID, req, c)
+
+	// for _, cond := range req {
+	// 	timestamp := time.Unix(cond.Timestamp, 0)
+
+	// 	if !isValidConditionFormat(cond.Condition) {
+	// 		return c.String(http.StatusBadRequest, "bad request body")
+	// 	}
+
+	// 	conditions = append(conditions, IsuConditionBulk{
+	// 		JIAIsuUUID: jiaIsuUUID,
+	// 		Timestamp:  timestamp,
+	// 		IsSitting:  cond.IsSitting,
+	// 		Condition:  cond.Condition,
+	// 		Message:    cond.Message,
+	// 	})
+	// }
+	// _, err_ := tx.NamedExec("INSERT INTO `isu_condition`"+
+	// 	"	(`jia_isu_uuid`, `timestamp`, `is_sitting`, `condition`, `message`)"+
+	// 	"	VALUES (:jia_isu_uuid, :timestamp, :is_sitting, :condition, :message)", conditions)
+	// if err_ != nil {
+	// 	c.Logger().Errorf("db error: %v", err_)
+	// 	return c.NoContent(http.StatusInternalServerError)
+	// }
 
 	// for _, cond := range req {
 	// 	timestamp := time.Unix(cond.Timestamp, 0)
@@ -98,7 +163,7 @@ func postIsuCondition(c echo.Context) error {
 
 	// }
 
-	err = tx.Commit()
+	// err = tx.Commit()
 	if err != nil {
 		c.Logger().Errorf("db error: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
