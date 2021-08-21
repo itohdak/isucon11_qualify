@@ -110,7 +110,8 @@ GROUP BY jia_isu_uuid
 ) t3
 ON (t2.timestamp = t3.timestamp AND t2.jia_isu_uuid = t3.jia_isu_uuid)
 ) t4
-ON t1.jia_isu_uuid = t4.jia_isu_uuid AND t1.jia_user_id = ?;
+ON t1.jia_isu_uuid = t4.jia_isu_uuid AND t1.jia_user_id = ?
+ORDER BY t4.timestamp DESC;
 		`,
 		jiaUserID)
 	if err != nil {
