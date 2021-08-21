@@ -38,3 +38,5 @@ CREATE TABLE `isu_association_config` (
 
 -- 11:30追加
 alter table isu_condition add index idx_isucondition_jia_isu_uuid_timestamp(jia_isu_uuid, timestamp);
+alter table isu_condition add index idx_isucondition_jia_isu_uuid(jia_isu_uuid);
+-- alter table isu_condition add index idx_isucondition_timestamp(timestamp);
