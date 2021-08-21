@@ -22,27 +22,33 @@ type counter struct {
 	conditions []IsuConditionBulk
 }
 
-func (m *counter) Set(jiaIsuUUID string, condition []IsuConditionBulk, c echo.Context) int {
+func (m *counter) Set(jiaIsuUUID string, condition []IsuConditionBulk, c echo.Context) bool {
 	m.mu.Lock() // 追加
-	
-	m.conditions = append(m.conditions, condition)
+	m.conditions = append(m.conditions, condition...)
 
 	if len(m.conditions) >= 100 {
 		tx, err := db.Beginx()
+		if err != nil {
+			c.Logger().Errorf("db error: %v", err)
+			return false
+		}
 		_, err_ := tx.NamedExec("INSERT INTO `isu_condition`"+
 			"	(`jia_isu_uuid`, `timestamp`, `is_sitting`, `condition`, `message`)"+
 			"	VALUES (:jia_isu_uuid, :timestamp, :is_sitting, :condition, :message)", m.conditions)
 		if err_ != nil {
 			c.Logger().Errorf("db error: %v", err_)
-			return 2
+			return false
 		}
 		m.conditions = []IsuConditionBulk{}
 		err = tx.Commit()
+		if err != nil {
+			c.Logger().Errorf("db error: %v", err)
+			return false
+		}
 	}
-	
 
 	m.mu.Unlock()
-	return 1
+	return true
 }
 
 func postIsuCondition(c echo.Context) error {
@@ -56,11 +62,11 @@ func postIsuCondition(c echo.Context) error {
 	// 	return c.NoContent(http.StatusAccepted)
 	// }
 
-	// dropProbability := 0.5
-	// if rand.Float64() <= dropProbability {
-	// 	c.Logger().Warnf("drop post isu condition request")
-	// 	return c.NoContent(http.StatusAccepted)
-	// }
+	dropProbability := 0.5
+	if rand.Float64() <= dropProbability {
+		c.Logger().Warnf("drop post isu condition request")
+		return c.NoContent(http.StatusAccepted)
+	}
 
 	jiaIsuUUID := c.Param("jia_isu_uuid")
 	if jiaIsuUUID == "" {
@@ -89,11 +95,15 @@ func postIsuCondition(c echo.Context) error {
 	if count == 0 {
 		return c.String(http.StatusNotFound, "not found: isu")
 	}
-	tx.Commit
+	err = tx.Commit()
+	if err != nil {
+		c.Logger().Errorf("db error: %v", err)
+		return c.NoContent(http.StatusInternalServerError)
+	}
 
 	condition := []IsuConditionBulk{}
 
-		for _, cond := range req {
+	for _, cond := range req {
 		timestamp := time.Unix(cond.Timestamp, 0)
 
 		if !isValidConditionFormat(cond.Condition) {
@@ -109,11 +119,9 @@ func postIsuCondition(c echo.Context) error {
 		})
 	}
 
-	isSuccess := m.Set(jiaIsuUUID, req, c)
-	if isSuccess == 2 {
+	isSuccess := m.Set(jiaIsuUUID, condition, c)
+	if isSuccess == false {
 		return c.NoContent(http.StatusInternalServerError)
-	} else if isSuccess == 3 {
-		return c.String(http.StatusNotFound, "not found: isu")
 	}
 
 	// for _, cond := range req {
@@ -159,10 +167,10 @@ func postIsuCondition(c echo.Context) error {
 	// }
 
 	// err = tx.Commit()
-	if err != nil {
-		c.Logger().Errorf("db error: %v", err)
-		return c.NoContent(http.StatusInternalServerError)
-	}
+	// if err != nil {
+	// 	c.Logger().Errorf("db error: %v", err)
+	// 	return c.NoContent(http.StatusInternalServerError)
+	// }
 
 	return c.NoContent(http.StatusAccepted)
 }
