@@ -50,10 +50,10 @@ func getIsuList(c echo.Context) error {
 		(
 			SELECT jia_isu_uuid, MAX(timestamp) as timestamp
 			FROM isu_condition
+			WHERE isu_condition.jia_isu_uuid IN (?) 
 			GROUP BY jia_isu_uuid
 		) t
 		ON isu_condition.jia_isu_uuid = t.jia_isu_uuid AND isu_condition.timestamp = t.timestamp
-		WHERE isu_condition.jia_isu_uuid IN (?)
 		`, jia_isu_uuids)
 	if err != nil {
 		log.Print(err)
@@ -69,26 +69,29 @@ func getIsuList(c echo.Context) error {
 	}
 	for _, isu := range isuList {
 		var lastCondition IsuCondition
+		foundLastCondition := false
 		if val, ok := lastConditionMap[isu.JIAIsuUUID]; ok {
 			lastCondition = val
-		} else {
-			continue
-		}
-		var formattedCondition *GetIsuConditionResponse
-		conditionLevel, err := calculateConditionLevel(lastCondition.Condition)
-		if err != nil {
-			c.Logger().Error(err)
-			return c.NoContent(http.StatusInternalServerError)
+			foundLastCondition = true
 		}
 
-		formattedCondition = &GetIsuConditionResponse{
-			JIAIsuUUID:     lastCondition.JIAIsuUUID,
-			IsuName:        isu.Name,
-			Timestamp:      lastCondition.Timestamp.Unix(),
-			IsSitting:      lastCondition.IsSitting,
-			Condition:      lastCondition.Condition,
-			ConditionLevel: conditionLevel,
-			Message:        lastCondition.Message,
+		var formattedCondition *GetIsuConditionResponse
+		if foundLastCondition {
+			conditionLevel, err := calculateConditionLevel(lastCondition.Condition)
+			if err != nil {
+				c.Logger().Error(err)
+				return c.NoContent(http.StatusInternalServerError)
+			}
+
+			formattedCondition = &GetIsuConditionResponse{
+				JIAIsuUUID:     lastCondition.JIAIsuUUID,
+				IsuName:        isu.Name,
+				Timestamp:      lastCondition.Timestamp.Unix(),
+				IsSitting:      lastCondition.IsSitting,
+				Condition:      lastCondition.Condition,
+				ConditionLevel: conditionLevel,
+				Message:        lastCondition.Message,
+			}
 		}
 
 		res := GetIsuListResponse{
